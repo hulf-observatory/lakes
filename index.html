@@ -1,0 +1,136 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<link rel="icon" type="image/svg+xml" href="favicon.svg">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Lake Atlas · Hyderabad Urban Observatory</title>
+<meta name="description" content="Hyderabad's lakes: where the water comes from, where it goes, and how much rain fell on each catchment.">
+<link rel="stylesheet" href="vendor/fonts/lato.css">
+<link rel="stylesheet" href="vendor/fonts/outfit.css">
+<link rel="stylesheet" href="vendor/maplibre-gl.css">
+<link rel="stylesheet" href="css/style.css">
+<!-- visit counter: page, referring site, country; no cookies, no IP addresses (live-feed/visits.js) -->
+<script src="https://api.urbanobservatory.in/visits.js" defer></script>
+</head>
+<body>
+
+<header id="topbar">
+  <div class="brand">
+    <a class="brand-logo" href="https://hyderabad.urbanobservatory.in/" title="Hyderabad Urban Observatory">
+      <svg viewBox="0 0 100 100" aria-hidden="true"><defs><rect id="bH1" x="2" y="26" width="96" height="16" rx="6"/><rect id="bH2" x="2" y="58" width="96" height="16" rx="6"/><rect id="bV1" x="28" y="2" width="16" height="96" rx="6" transform="rotate(18 36 50)"/><rect id="bV2" x="56" y="2" width="16" height="96" rx="6" transform="rotate(18 64 50)"/><mask id="cH1"><rect width="100" height="100" fill="white"/><use href="#bV1" fill="black" stroke="black" stroke-width="4"/></mask><mask id="cV2"><rect width="100" height="100" fill="white"/><use href="#bH1" fill="black" stroke="black" stroke-width="4"/></mask><mask id="cH2"><rect width="100" height="100" fill="white"/><use href="#bV2" fill="black" stroke="black" stroke-width="4"/></mask><mask id="cV1"><rect width="100" height="100" fill="white"/><use href="#bH2" fill="black" stroke="black" stroke-width="4"/></mask></defs><g fill="#FFFFFF" stroke="#111" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><use href="#bH1" mask="url(#cH1)"/><use href="#bV2" mask="url(#cV2)"/><use href="#bH2" mask="url(#cH2)"/><use href="#bV1" mask="url(#cV1)"/></g></svg>
+    </a>
+    <span class="brand-txt">
+      <button type="button" class="brand-wm" id="brand-home" title="Back to all of HMDA">Lake Atlas</button>
+      <a class="brand-sub" href="https://hyderabad.urbanobservatory.in/">Hyderabad Urban Observatory</a>
+    </span>
+  </div>
+  <div class="spacer"></div>
+  <div class="topact">
+    <button type="button" id="btn-about" class="btn-plain" aria-expanded="false" aria-controls="about">About</button>
+    <button type="button" id="btn-reset" title="Back to all of HMDA" aria-label="Back to all of HMDA">↻</button>
+    <div class="obs-appmenu">
+      <button type="button" id="btn-sitemenu" title="Observatory" aria-label="Observatory menu" aria-expanded="false" aria-controls="sitemenu"><span class="obs-burger-i"></span></button>
+      <nav class="obs-appmenu-card" id="sitemenu" aria-label="Observatory" hidden>
+        <span class="lab">Hyderabad Urban Observatory</span>
+        <a href="https://hyderabad.urbanobservatory.in/">Home</a>
+        <a href="https://hyderabad.urbanobservatory.in/live/" class="obs-live"><i class="obs-live-dot" aria-hidden="true"></i>Live</a>
+        <a href="https://hyderabad.urbanobservatory.in/maps/">Layers</a>
+        <a href="https://hyderabad.urbanobservatory.in/tools/">Tools</a>
+        <a href="https://hyderabad.urbanobservatory.in/stories/">Stories</a>
+        <a href="https://hyderabad.urbanobservatory.in/contribute/">Contribute</a>
+        <a href="https://hyderabad.urbanobservatory.in/data/">Data sources</a>
+        <a href="https://hyderabad.urbanobservatory.in/about">About the Observatory</a>
+      </nav>
+    </div>
+  </div>
+</header>
+
+<div id="app">
+  <aside id="panel" aria-label="Details">
+    <button type="button" id="sheet-handle" aria-expanded="true" aria-controls="panel-body"><span></span><b id="sheet-label">Details</b></button>
+    <div id="panel-head">
+      <p class="eyebrow" id="p-eyebrow">HMDA</p>
+      <h1 id="p-title">Lakes and their catchments</h1>
+      <p id="p-sub">Tap a lake to see where its water comes from and where it goes, or tap anywhere to see which lake that spot drains into.</p>
+    </div>
+    <div id="panel-body"></div>
+  </aside>
+
+  <main id="map-wrap">
+    <div id="map" aria-label="Map of lakes, streams and catchments in HMDA"></div>
+    <div id="map-tip" hidden></div>
+
+    <div id="tools">
+      <div class="float search">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3.5-3.5"/></svg>
+        <input id="ps-input" type="search" placeholder="Find a place" aria-label="Find a place">
+      </div>
+      <div id="ps-results" class="float ps-pop" hidden></div>
+      <button type="button" id="btn-layers" class="float fbtn" aria-expanded="false" aria-controls="layers">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round" aria-hidden="true"><path d="M12 3l9 5-9 5-9-5 9-5z"/><path d="M3 13l9 5 9-5"/></svg>
+        Map
+      </button>
+      <div id="layers" class="float card" hidden>
+        <p class="eyebrow">Base map</p>
+        <div class="seg" id="base-seg" role="radiogroup" aria-label="Base map"></div>
+        <p class="eyebrow">Show</p>
+        <label class="chk"><input type="checkbox" id="chk-streams"> All streams</label>
+        <label class="chk"><input type="checkbox" id="chk-catchments"> All catchment outlines</label>
+        <div id="overlay-list"></div>
+        <p class="eyebrow">Terrain</p>
+        <label class="chk"><input type="checkbox" id="chk-3d"> 3D view</label>
+        <div id="terrain-ctl" hidden>
+          <label class="rng"><span>Height ×<b id="v-exag">3</b></span><input type="range" id="r-exag" min="1" max="10" step="0.5" value="3"></label>
+          <label class="rng"><span>Tilt <b id="v-pitch">60°</b></span><input type="range" id="r-pitch" min="0" max="85" step="1" value="60"></label>
+        </div>
+      </div>
+    </div>
+
+    <div id="legend" class="float card">
+      <ul>
+        <li><i class="sw lake"></i>Lake</li>
+        <li class="sel-only"><i class="sw sel"></i>Selected lake and its catchment</li>
+        <li class="sel-only"><i class="ln up"></i>Water flowing in</li>
+        <li class="sel-only"><i class="ln down"></i>Water flowing on, to the river</li>
+        <li class="sel-only"><i class="dot out"></i>Where it meets the river</li>
+        <li><i class="sw river"></i>River</li>
+      </ul>
+      <p class="note">HMDA only; outside is greyed.</p>
+    </div>
+  </main>
+</div>
+
+<div id="about" class="sheet" role="dialog" aria-labelledby="about-title" hidden>
+  <div class="sheet-card">
+    <button type="button" class="close" id="about-close" aria-label="Close">×</button>
+    <h2 id="about-title">Lake Atlas</h2>
+    <p>How water moves through the land around Hyderabad: the lakes of HMDA, the area that drains into each one (its catchment), the path its water takes to the next lake and on to a river, and how much rain fell on each catchment.</p>
+    <h3>How to use it</h3>
+    <ul>
+      <li><b>Tap a lake</b> to see its catchment, the lakes that feed it, the way its water leaves, its rain since February 2026, and how much rain its rooftops could collect.</li>
+      <li><b>Tap anywhere else</b> to see which lake the water from that spot runs into, or which river if no lake is on the way.</li>
+      <li>Under <b>Map</b>: change the base map, show all streams or catchment outlines, show ward, circle or corporation outlines, and turn on the 3D view. On a phone, tilt with two fingers.</li>
+      <li>The address in the browser changes with each lake you open, so you can share it.</li>
+    </ul>
+    <h3>How it was made</h3>
+    <p><b>Catchments.</b> A catchment is the land that drains into one lake. They were traced from a 30 m elevation model (FABDEM) for all of Telangana: lake beds burned into the terrain, pits filled, flats resolved, then flow direction (D8) and flow accumulation computed, and each lake's catchment traced upstream from its outlet.</p>
+    <p><b>Drainage network.</b> From each lake's outlet the flow direction is followed downhill, cell by cell, until it reaches another lake or a river. This gives about 31,500 links between lakes and rivers; the paths follow the terrain, not straight lines.</p>
+    <p><b>Streams.</b> Cells that collect water from at least 50 others, ordered by the Strahler method, each tagged with the catchment it lies in.</p>
+    <p><b>Rain.</b> Daily rain from Telangana's automatic weather stations (TGDPS). A rain day runs from 08:30 to 08:30 IST, the way the stations count it, and is named by the date it starts. Each catchment's rain is the area-weighted average of the stations nearest to its parts (Thiessen polygons). A station without a reading that day counts as no rain. The HMDA figure is the average of the stations. A gauge whose day is over 50 mm while none of its five nearest stations had a fifth of that is treated as faulty and left out.</p>
+    <p><b>Rooftop harvest.</b> Rooftop area × rain × 0.8. Rooftop area is the footprint of the buildings in the catchment (Overture Maps, about 2.57 million buildings in HMDA); 0.8 allows for evaporation and other losses. It covers the dates you pick and is not a yearly figure.</p>
+    <h3>Sources</h3>
+    <p>Elevation: FABDEM (Forest And Buildings removed Copernicus DEM), 30 m. Buildings: Overture Maps Foundation. Lakes, rivers and boundaries: TGRAC. Rain: TGDPS, Planning Department, Government of Telangana. Base map: OpenFreeMap, © OpenStreetMap contributors.</p>
+    <h3>History</h3>
+    <p>Built in 2026 and run by Amruth Kiran on his server until November 2026. Since then it is served as plain files from the observatory, so it no longer needs a database. Rain since then is counted per 08:30 rain day; the earlier version took the highest reading in each calendar day, which counted most rain on two days.</p>
+    <p class="fine">This site is under continuous development. Tell us what you think at <a href="mailto:hulf.observatory@gmail.com">hulf.observatory@gmail.com</a>. Processing and metadata CC BY 4.0; each layer keeps its source's licence. <a href="https://hyderabad.urbanobservatory.in/disclaimer">Disclaimer</a></p>
+  </div>
+</div>
+
+<div id="loader"><p id="loader-text">Loading</p><div id="loader-bar"><i></i></div></div>
+
+<script src="vendor/maplibre-gl.js"></script>
+<script src="vendor/pmtiles.js"></script>
+<script type="module" src="js/main.js"></script>
+</body>
+</html>
