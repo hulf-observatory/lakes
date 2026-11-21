@@ -15,6 +15,11 @@ const litres = (L) => (!L ? null : L >= 1e9 ? [(L / 1e9).toFixed(2), 'billion li
 const fmt = (d, o = { day: 'numeric', month: 'short', year: 'numeric' }) => (d ? new Date(d + 'T00:00:00').toLocaleDateString('en-GB', o) : '—');
 const short = (d) => fmt(d, { day: 'numeric', month: 'short' });
 const row = (k, v) => `<li><span>${esc(k)}</span><b>${esc(v)}</b></li>`;
+// dates as day numbers, in UTC so the browser's time zone never shifts a day
+const DAY = 86400000;
+const dn = (s) => Date.UTC(+s.slice(0, 4), +s.slice(5, 7) - 1, +s.slice(8, 10)) / DAY;
+const iso = (d) => new Date(d * DAY).toISOString().slice(0, 10);
+const weekday = (d) => new Date(d * DAY).getUTCDay();
 
 export function head(eyebrow, title, sub) {
   $('p-eyebrow').textContent = eyebrow;
@@ -25,26 +30,29 @@ export function head(eyebrow, title, sub) {
 }
 
 // ---- rain calendar: weeks across, days down; IMD categories (mm per day) ----
+// The blue ramp has five steps, so IMD's "extremely heavy" (204.5 mm and more) shares the darkest with "very heavy".
 const CATS = [[0.1, '#E4EDF6', 'very light'], [2.5, '#B7CDE4', 'light'], [15.6, '#7FA6CE', 'moderate'],
-              [64.5, '#3F76B0', 'heavy'], [115.6, '#123F70', 'very heavy']];
+              [64.5, '#3F76B0', 'heavy'], [115.6, '#123F70', 'very heavy or more']];
 const colour = (mm) => { let c = '#F3F4F6'; for (const [lo, col] of CATS) if (mm >= lo) c = col; return c; };
 
 function calendar(series) {
   if (!series.length) return '<p class="note">No rain readings for these dates.</p>';
   const S = 11, G = 2, MAXW = 26;
-  const weeks = Math.ceil((series.length + new Date(series[0].date).getDay()) / 7);
-  const data = weeks > MAXW ? series.slice(-(MAXW * 7 - 6)) : series;
-  let col = 0, rowi = new Date(data[0].date + 'T00:00:00').getDay();
+  // each day sits at its own date (a day with no readings stays an empty gap); columns are weeks from Sunday
+  const end = dn(series[series.length - 1].date);
+  const start = Math.max(dn(series[0].date) - weekday(dn(series[0].date)), end - weekday(end) - (MAXW - 1) * 7);
+  const data = series.filter((r) => dn(r.date) >= start);
   const cells = [], months = [];
-  let lastM = -1, lastCol = -9;
+  let lastM = -1, lastCol = -9, col = 0;
   for (const r of data) {
+    const k = dn(r.date) - start, rowi = k % 7;
+    col = Math.floor(k / 7);
     const m = +r.date.slice(5, 7);
     if (m !== lastM && r.date.slice(8) <= '07') {           // label a month at the week it starts, if there is room
       if (col - lastCol >= 3) { months.push([col, fmt(r.date, { month: 'short' })]); lastCol = col; }
       lastM = m;
     }
     cells.push(`<rect x="${col * (S + G)}" y="${16 + rowi * (S + G)}" width="${S}" height="${S}" rx="2" fill="${colour(r.mm)}" data-t="${short(r.date)} · ${d1(r.mm)} mm"/>`);
-    if (++rowi === 7) { rowi = 0; col++; }
   }
   const w = (col + 1) * (S + G), h = 16 + 7 * (S + G);
   const labels = months.map(([c, t]) => `<text x="${c * (S + G)}" y="10">${t}</text>`).join('');
@@ -99,11 +107,11 @@ function rainSection(host, series, onRange, scope) {
   host.querySelector('.seg').addEventListener('click', (e) => {
     const k = e.target.dataset?.r; if (!k) return;
     host.querySelectorAll('.seg button').forEach((x) => x.setAttribute('aria-checked', String(x === e.target)));
-    const end = new Date(last + 'T00:00:00');
     let start = first;
-    if (k === '30' || k === '90') { const d = new Date(end); d.setDate(d.getDate() - (+k - 1)); start = d.toISOString().slice(0, 10); }
-    if (k === 'monsoon') {                    // IMD's southwest monsoon season, 1 June to 30 September, of the latest year
-      const y = last.slice(0, 4); start = `${y}-06-01`; to.value = last < `${y}-09-30` ? last : `${y}-09-30`;
+    if (k === '30' || k === '90') start = iso(dn(last) - (+k - 1));
+    if (k === 'monsoon') {                    // IMD's southwest monsoon season, 1 June to 30 September, of the latest one begun
+      const y = +last.slice(0, 4) - (last < `${last.slice(0, 4)}-06-01` ? 1 : 0);
+      start = `${y}-06-01`; to.value = last < `${y}-09-30` ? last : `${y}-09-30`;
     } else to.value = last;
     from.value = start < first ? first : start;
     draw();
@@ -131,13 +139,14 @@ function harvestSection(host, roofM2, buildings, scope) {
 export function renderOverview(ctx) {
   head('HMDA', 'Lakes and their catchments', 'Tap a lake to see where its water comes from and where it goes, or tap anywhere to see which lake that spot drains into.');
   const body = $('panel-body');
-  let roof = 0, bldg = 0;
-  for (const r of Object.values(ctx.roof.lake_catchment || {})) { roof += r.total_roof_m2 || 0; bldg += r.n_buildings || 0; }
+  // every building in HMDA counted once (hmda_totals.json); adding up the catchments would count most roofs several
+  // times, since a lake's catchment holds the catchments of the lakes upstream
+  const t = ctx.totals;
   body.innerHTML = `<div class="sec" id="s-rain"></div><div class="sec" id="s-harvest"></div>
     <div class="sec"><p class="eyebrow">Lakes and the rivers they end in</p><ul class="rows">${row('Lakes in HMDA', n0(ctx.lakeCount))}
       ${ctx.rivers.slice(0, 5).map(([r, k]) => row(r, `${n0(k)} lakes`)).join('')}</ul>
     <p class="note">Rain from TGDPS automatic weather stations, counted per rain day from 08:30 to 08:30 IST${ctx.asOf ? `; newest reading ${fmtTime(ctx.asOf)}` : ''}.</p></div>`;
-  rainSection($('s-rain'), ctx.series, harvestSection($('s-harvest'), roof, bldg, 'hmda'), 'area');
+  rainSection($('s-rain'), ctx.series, t ? harvestSection($('s-harvest'), t.roof_m2, t.buildings, 'hmda') : () => {}, 'area');
 }
 
 // ---- one lake ----
@@ -146,7 +155,6 @@ export function renderLake(n, ctx, spot) {
   if (spot) head('Water from this spot flows into', name, `${spot.lat.toFixed(5)}° N, ${spot.lng.toFixed(5)}° E${spot.elev != null ? ` · ${n0(spot.elev)} m above sea level` : ''}`);
   else head('Lake', name, `${area(n.area)} of water · catchment ${area(n.catchment)}`);
   const roof = ctx.roof.lake_catchment?.[n.id] || {};
-  const net = ctx.netStats?.[n.id];
   const chain = [`<li class="here">${esc(name)}</li>`,
     ...n.chain.map((c) => c.river ? `<li class="river">${esc(c.river)}<span>${dist(c.metres)}</span></li>`
       : `<li><button type="button" data-lake="${c.id}">${esc(lakeName(c.id))}</button><span>${dist(c.metres)}</span></li>`)];
@@ -160,10 +168,7 @@ export function renderLake(n, ctx, spot) {
       ${n.metres && n.outlet ? `<p class="note">${dist(n.metres)} along the flow path to the river.</p>` : ''}
     </div>
     <div class="sec" id="s-rain"></div>
-    <div class="sec" id="s-harvest"></div>
-    ${net ? `<div class="sec"><p class="eyebrow">With everything upstream</p><ul class="rows">
-      ${row('Land draining here', area(net.network_catchment_area_m2))}${row('Rooftop area', area(net.network_roof_area_m2))}${row('Buildings', n0(net.network_buildings))}</ul>
-      <p class="note">This lake's catchment and the catchments of all the lakes that drain into it.</p></div>` : ''}`;
+    <div class="sec" id="s-harvest"></div>`;
   body.querySelectorAll('[data-lake]').forEach((b) => b.addEventListener('click', () => ctx.open(b.dataset.lake)));
   rainSection($('s-rain'), ctx.series, harvestSection($('s-harvest'), roof.total_roof_m2 || 0, roof.n_buildings || 0, 'lake'), 'lake');
   body.scrollTop = 0;

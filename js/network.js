@@ -20,6 +20,8 @@ export function initNetwork(graph) {
 export const lake = (id) => G?.[id] || null;
 export const isHmdaLake = (id) => !!G?.[id]?.h;
 export const lakeCount = () => Object.values(G).filter((r) => r.h).length;
+// HMDA lakes with a bounding box, for the search: {id: bbox}
+export const hmdaLakes = () => Object.fromEntries(Object.entries(G).filter(([, r]) => r.h && r.bb).map(([id, r]) => [id, r.bb]));
 
 // "lake_00928" → "Lake 928" (the lakes have no names in the source data)
 export const lakeName = (id) => { const m = /_(\d+)$/.exec(id || ''); return m ? `Lake ${parseInt(m[1], 10)}` : id; };

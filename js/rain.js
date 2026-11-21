@@ -39,8 +39,15 @@ export function hmdaRain() {
 
 export function stats(series) {
   const total = series.reduce((s, r) => s + r.mm, 0);
-  let peak = null, dry = { n: 0 }, wet = { n: 0 }, spells = 0, curDry = 0, curWet = 0, dryStart, wetStart;
+  let peak = null, dry = { n: 0 }, wet = { n: 0 }, spells = 0, curDry = 0, curWet = 0, dryStart, wetStart, prev = null;
+  const day = (s) => Date.UTC(+s.slice(0, 4), +s.slice(5, 7) - 1, +s.slice(8, 10)) / 864e5;
   for (const r of series) {
+    if (prev != null && day(r.date) - prev > 1) {   // a day with no readings ends any spell: we don't know if it rained
+      if (curDry > dry.n) dry = { n: curDry, from: dryStart };
+      if (curWet > wet.n) wet = { n: curWet, from: wetStart };
+      curDry = 0; curWet = 0;
+    }
+    prev = day(r.date);
     if (!peak || r.mm > peak.mm) peak = r;
     if (r.mm >= 2.5) {                               // a rainy day, as IMD counts it
       if (!curWet) { wetStart = r.date; spells++; }

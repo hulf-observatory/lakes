@@ -1,7 +1,7 @@
 // Lake Atlas: loads the data, builds the map, and wires clicks, the panel, the controls and the address.
 import { DATA_URL, HMDA_EXTENT } from '../config.js';
 import { createMap, highlight, clearHighlight, setPoint, setHover, baseChoices, setBase, setVisible, set3D, get3D, setExaggeration } from './map.js';
-import { initNetwork, walk, lake, isHmdaLake, lakeCount, lakeName } from './network.js';
+import { initNetwork, walk, lake, isHmdaLake, lakeCount, lakeName, hmdaLakes } from './network.js';
 import { initRain, lakeRain, hmdaRain, rainAsOf } from './rain.js';
 import { initGrid, lookup } from './grid.js';
 import { renderOverview, renderLake, renderSpot } from './panel.js';
@@ -17,10 +17,10 @@ let map, ctx;
 
 async function main() {
   loader('Loading the network', 15);
-  const [graph, boundary, weights, rain, roof, netStats, ovList] = await Promise.all([
+  const [graph, boundary, weights, rain, roof, totals, ovList] = await Promise.all([
     json('graph.json'), json('boundary.json'), json('station_weights.json'),
     json('rain.json', { dates: [], st: {}, open: 0 }), json('roof_area_by_catchment.json', { lake_catchment: {} }),
-    json('network_stats_by_lake.json', {}), json('overlays/manifest.json', []),
+    json('hmda_totals.json', null), json('overlays/manifest.json', []),
   ]);
   initNetwork(graph);
   initRain(rain, weights);
@@ -29,7 +29,7 @@ async function main() {
   // rivers the HMDA lakes end in, by number of lakes
   const rc = {};
   for (const rec of Object.values(graph.lakes)) if (rec.h && rec.tr) rc[rec.tr] = (rc[rec.tr] || 0) + 1;
-  ctx = { roof, netStats, lakeCount: lakeCount(), rivers: Object.entries(rc).sort((a, b) => b[1] - a[1]), asOf: rainAsOf(), open: (id) => openLake(id) };
+  ctx = { roof, totals, lakeCount: lakeCount(), rivers: Object.entries(rc).sort((a, b) => b[1] - a[1]), asOf: rainAsOf(), open: (id) => openLake(id) };
 
   loader('Drawing the map', 45);
   const sharedView = location.hash.includes('map=');      // a shared link with its own map position: keep it
@@ -180,7 +180,7 @@ function closeMenus() {
 function wireSearch() {
   const input = $('ps-input'), res = $('ps-results');
   // lakes are searchable by number ("Lake 928" or "928")
-  const lakes = Object.entries(walkable()).map(([id, bb]) => ({ name: lakeName(id), kind: 'lake', bbox: bb, id }));
+  const lakes = Object.entries(hmdaLakes()).map(([id, bb]) => ({ name: lakeName(id), kind: 'lake', bbox: bb, id }));
   createPlaceSearch({
     input, results: res, getMap: () => map,
     local: () => (/\d/.test(input.value) ? lakes : []),
@@ -194,12 +194,6 @@ function wireSearch() {
   input.addEventListener('input', () => { res.hidden = !input.value; });
   input.addEventListener('click', (e) => e.stopPropagation());
   res.addEventListener('click', (e) => e.stopPropagation());
-}
-
-function walkable() {
-  const out = {};
-  for (const id of Object.keys(ctx.netStats || {})) { const r = lake(id); if (r?.h && r.bb) out[id] = r.bb; }
-  return out;
 }
 
 main().catch((e) => { console.error(e); $('loader-text').textContent = `Could not load the atlas: ${e.message}`; });
